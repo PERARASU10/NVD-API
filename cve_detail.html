@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVE Detail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        indigo: {
+                            50: '#eef2ff',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .vector-metric {
+            display: inline-block;
+            padding: 2px 8px;
+            margin-right: 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            background-color: #f3f4f6; /* gray-100 */
+            color: #1f2937; /* gray-900 */
+            border: 1px solid #e5e7eb; /* gray-200 */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8 font-sans">
+
+    <div class="max-w-4xl mx-auto bg-white shadow-2xl rounded-xl p-6 sm:p-10 border border-gray-200">
+        
+        <a href="index.html" class="inline-flex items-center text-sm font-medium text-indigo-700 hover:text-indigo-900 mb-6">
+            &larr; Back to CVE List
+        </a>
+
+        <h1 class="text-3xl font-extrabold text-indigo-700 mb-4 border-b pb-3" id="cve-title">
+            Loading CVE Details...
+        </h1>
+
+        <div id="status-message" class="hidden p-3 mb-6 rounded-lg font-medium"></div>
+
+        <div id="cve-data-container" class="space-y-8">
+            <p class="text-gray-500" id="loading-indicator">Fetching full record...</p>
+            
+            <div class="bg-indigo-50 p-4 rounded-lg shadow-inner">
+                <h2 class="text-xl font-bold text-indigo-800 mb-3">Key Timestamps</h2>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <p><span class="font-semibold text-indigo-800">Published:</span> <span id="published-date">N/A</span></p>
+                    <p><span class="font-semibold text-indigo-800">Last Modified:</span> <span id="modified-date">N/A</span></p>
+                </div>
+            </div>
+            
+            <div class="border-t pt-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Description</h2>
+                <p id="description-text" class="text-gray-600 leading-relaxed italic">N/A</p>
+            </div>
+
+            <div class="border-t pt-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Impact & Scores (CVSS v3.1)</h2>
+                <div id="impact-scores" class="bg-gray-100 p-4 rounded-lg shadow">
+                    <p class="mb-2"><span class="font-semibold text-gray-800">Base Score:</span> <span id="cvss-score" class="font-bold text-lg">N/A</span></p>
+                    <p class="mb-2"><span class="font-semibold text-gray-800">Severity:</span> <span id="severity-badge" class="font-bold">N/A</span></p>
+                    <p class="mb-1"><span class="font-semibold text-gray-800">Vector String:</span> <span id="cvss-vector" class="text-sm font-mono">N/A</span></p>
+                    <div id="cvss-vector-breakdown" class="mt-3 flex flex-wrap gap-2">
+                        </div>
+                </div>
+            </div>
+
+            <div class="border-t pt-4">
+                <h2 class="text-xl font-semibold text-gray-800 mb-2">Vulnerable Products/CPEs</h2>
+                <ul id="cpe-list" class="list-disc list-inside space-y-1 text-sm text-gray-600 pl-4">
+                    <li>No configuration data found.</li>
+                </ul>
+            </div>
+            
+            <div class="border-t pt-6">
+                <details>
+                    <summary class="text-xl font-semibold text-gray-800 cursor-pointer hover:text-indigo-700">
+                        View Full Raw JSON (Advanced)
+                    </summary>
+                    <pre id="json-output" class="bg-gray-800 text-green-300 p-4 rounded-lg overflow-x-auto text-xs whitespace-pre-wrap mt-4">{}</pre>
+                </details>
+            </div>
+        </div>
+
+    </div> <script>
+        const API_URL = 'http://127.0.0.1:8000';
+        
+        const cveTitle = document.getElementById('cve-title');
+        const statusMessage = document.getElementById('status-message');
+        const descriptionText = document.getElementById('description-text');
+        const jsonOutput = document.getElementById('json-output');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const publishedDateSpan = document.getElementById('published-date');
+        const modifiedDateSpan = document.getElementById('modified-date');
+        const severityBadgeSpan = document.getElementById('severity-badge');
+        const cvssScoreSpan = document.getElementById('cvss-score');
+        const cvssVectorSpan = document.getElementById('cvss-vector');
+        const cvssVectorBreakdownDiv = document.getElementById('cvss-vector-breakdown');
+        const cpeListUl = document.getElementById('cpe-list');
+
+        // --- Utility Functions ---
+
+        function showMessage(message, type = 'success') {
+            statusMessage.textContent = message;
+            statusMessage.classList.remove('hidden', 'bg-red-100', 'bg-green-100', 'text-red-700', 'text-green-700');
+            statusMessage.classList.add(type === 'error' ? 'bg-red-100' : 'bg-green-100', type === 'error' ? 'text-red-700' : 'text-green-700');
+        }
+
+        function formatCveDate(dateString) {
+            try {
+                return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            } catch {
+                return dateString || 'N/A';
+            }
+        }
+        
+        function getCvssMetric(cve) {
+            try {
+                const metrics = cve.metrics.cvssMetricV31 || cve.metrics.cvssMetricV30; // Prioritize v3.x
+                if (metrics && metrics.length > 0) {
+                    const metric = metrics[0];
+                    return {
+                        version: metric.cvssData.version || '3.x',
+                        severity: metric.cvssData.baseSeverity || 'N/A',
+                        score: metric.cvssData.baseScore || 'N/A',
+                        vector: metric.cvssData.vectorString || '',
+                        vectorData: metric.cvssData 
+                    };
+                }
+                // Fallback to V2 if V3 is missing
+                const metricsV2 = cve.metrics.cvssMetricV2;
+                if (metricsV2 && metricsV2.length > 0) {
+                    return {
+                        version: '2.0',
+                        severity: metricsV2[0].baseSeverity || 'N/A',
+                        score: metricsV2[0].cvssData.baseScore || 'N/A',
+                        vector: metricsV2[0].cvssData.vectorString || '',
+                        vectorData: metricsV2[0].cvssData 
+                    };
+                }
+                return { version: 'N/A', severity: 'N/A', score: 'N/A', vector: '', vectorData: {} };
+            } catch {
+                return { version: 'N/A', severity: 'N/A', score: 'N/A', vector: '', vectorData: {} };
+            }
+        }
+        
+        function getSeverityClasses(severity) {
+            switch (severity.toUpperCase()) {
+                case 'CRITICAL': return 'bg-red-600 text-white font-bold px-2 py-0.5 rounded';
+                case 'HIGH': return 'bg-orange-500 text-white font-bold px-2 py-0.5 rounded';
+                case 'MEDIUM': return 'bg-yellow-400 text-gray-900 font-bold px-2 py-0.5 rounded';
+                case 'LOW': return 'bg-blue-400 text-white font-bold px-2 py-0.5 rounded';
+                default: return 'bg-gray-400 text-gray-800 font-bold px-2 py-0.5 rounded';
+            }
+        }
+
+        // --- Core Data Fetching and Rendering ---
+
+        async function fetchCveDetails(cveId) {
+            cveTitle.textContent = cveId;
+            loadingIndicator.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`${API_URL}/cve/${cveId}`);
+                
+                if (response.status === 404) {
+                    throw new Error(`CVE ID '${cveId}' not found in the local database.`);
+                }
+                if (!response.ok) {
+                    const errorJson = await response.json();
+                    throw new Error(errorJson.detail || `HTTP Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                renderCveDetails(data);
+                showMessage(`Successfully loaded full details for ${cveId}.`, 'success');
+
+            } catch (error) {
+                renderError(cveId, error.message);
+                showMessage(`Failed to load details: ${error.message}`, 'error');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+        
+        function renderCveDetails(data) {
+            const id = data.cveId || data.id || 'N/A';
+            cveTitle.textContent = `${id} - Detail View`;
+            
+            // 1. Description and Timestamps
+            const description = (data.descriptions && data.descriptions[0].value) || 'No description available.';
+            descriptionText.textContent = description;
+
+            publishedDateSpan.textContent = formatCveDate(data.published);
+            modifiedDateSpan.textContent = formatCveDate(data.lastModified);
+            
+            // 2. Impact/CVSS Scores
+            const metrics = getCvssMetric(data);
+            
+            severityBadgeSpan.textContent = metrics.severity;
+            severityBadgeSpan.className = getSeverityClasses(metrics.severity);
+            
+            cvssScoreSpan.textContent = `${metrics.score} (v${metrics.version})`;
+            cvssVectorSpan.textContent = metrics.vector || 'N/A';
+            
+            renderVectorBreakdown(metrics.vectorData);
+
+            // 3. Configurations (Vulnerable Products)
+            renderConfigurations(data.configurations);
+
+            // 4. Full JSON
+            jsonOutput.textContent = JSON.stringify(data, null, 2);
+        }
+        
+        function renderVectorBreakdown(vectorData) {
+            cvssVectorBreakdownDiv.innerHTML = '';
+            if (Object.keys(vectorData).length === 0) return;
+
+            // Map keys in CVSS data to human-readable labels
+            const labels = {
+                attackVector: "Attack Vector (AV)",
+                attackComplexity: "Attack Complexity (AC)",
+                privilegesRequired: "Privileges Required (PR)",
+                userInteraction: "User Interaction (UI)",
+                scope: "Scope (S)",
+                confidentialityImpact: "Confidentiality (C)",
+                integrityImpact: "Integrity (I)",
+                availabilityImpact: "Availability (A)",
+            };
+            
+            for (const key in labels) {
+                if (vectorData[key]) {
+                    const metricValue = vectorData[key];
+                    const element = document.createElement('span');
+                    element.className = 'vector-metric';
+                    element.textContent = `${labels[key]}: ${metricValue}`;
+                    cvssVectorBreakdownDiv.appendChild(element);
+                }
+            }
+        }
+
+        function renderConfigurations(configurations) {
+            cpeListUl.innerHTML = '';
+            if (!configurations || configurations.length === 0) {
+                cpeListUl.innerHTML = '<li>No configuration data found.</li>';
+                return;
+            }
+
+            const cpeSet = new Set();
+            
+            configurations.forEach(config => {
+                if (config.nodes) {
+                    config.nodes.forEach(node => {
+                        if (node.cpeMatch) {
+                            node.cpeMatch.forEach(match => {
+                                if (match.vulnerable === true) {
+                                    cpeSet.add(match.cpe23Uri || match.cpeUri);
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+
+            if (cpeSet.size === 0) {
+                cpeListUl.innerHTML = '<li>No specific vulnerable CPEs listed.</li>';
+                return;
+            }
+
+            // Display up to 10 unique CPEs to keep the page clean
+            Array.from(cpeSet).slice(0, 10).forEach(cpe => {
+                const li = document.createElement('li');
+                li.textContent = cpe;
+                cpeListUl.appendChild(li);
+            });
+            
+            if (cpeSet.size > 10) {
+                 const li = document.createElement('li');
+                 li.textContent = `... and ${cpeSet.size - 10} more vulnerable products. Check raw JSON for the full list.`;
+                 li.className = 'italic text-gray-500 mt-2';
+                 cpeListUl.appendChild(li);
+            }
+        }
+        
+        function renderError(cveId, message) {
+            cveTitle.textContent = cveId;
+            descriptionText.textContent = message;
+            jsonOutput.textContent = `{ "error": "${message}", "cve_id": "${cveId}" }`;
+        }
+
+        // --- Initialization ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const cveId = params.get('cve_id');
+
+            if (cveId) {
+                fetchCveDetails(cveId);
+            } else {
+                renderError('N/A', 'No CVE ID provided in the URL.');
+                cveTitle.textContent = 'Error: Missing CVE ID';
+            }
+        });
+
+    </script>
+</body>
+</html>

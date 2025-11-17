@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVE Data Explorer with Pagination</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        indigo: {
+                            50: '#eef2ff',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .custom-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 0 3px rgba(67, 56, 202, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8 font-sans">
+
+    <div class="max-w-6xl mx-auto bg-white shadow-2xl rounded-xl p-6 sm:p-10 border border-gray-200">
+        
+        <h1 class="text-3xl font-extrabold text-indigo-700 mb-6 border-b pb-3">
+            Local CVE Data Explorer
+        </h1>
+
+        <div id="status-message" class="hidden p-3 mb-4 rounded-lg font-medium text-center"></div>
+
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-6 p-4 bg-indigo-50 rounded-lg shadow-inner">
+            
+            <div class="flex items-center gap-4">
+                <label for="pageSize" class="text-sm font-medium text-gray-700">Records per Page:</label>
+                <select id="pageSize" 
+                        class="block rounded-md border-gray-300 shadow-sm p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            
+            <button id="loadInitialData" 
+                    class="bg-indigo-700 hover:bg-indigo-800 text-white font-semibold py-2 px-4 rounded-lg 
+                            shadow-md transition duration-150 ease-in-out transform hover:scale-[1.02]">
+                Load First Page
+            </button>
+
+            <div id="pagination-info" class="text-sm text-gray-600">
+                Total Records: <span id="totalRecords">0</span> | 
+                Page: <span id="currentPage">0</span> of <span id="totalPages">0</span>
+            </div>
+        </div>
+
+        <div class="mb-8 p-5 bg-gray-100 rounded-lg shadow">
+             <h2 class="text-xl font-semibold text-gray-800 mb-3">
+                Single CVE Lookup
+            </h2>
+            <div class="flex gap-4">
+                <input type="text" id="searchCveId" placeholder="e.g., CVE-2024-8001" 
+                       class="flex-grow rounded-md border-gray-300 shadow-sm p-2.5 
+                             focus:ring-indigo-500 focus:border-indigo-500">
+                <button id="searchButton" 
+                        class="bg-gray-700 hover:bg-gray-800 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150">
+                    Search
+                </button>
+            </div>
+        </div>
+
+
+        <div class="overflow-x-auto shadow-lg rounded-lg border border-indigo-300">
+            <table class="min-w-full divide-y divide-indigo-200">
+                <thead class="bg-indigo-100">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">CVE ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">Published Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">Severity (NVD)</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">Description Snippet</th>
+                    </tr>
+                </thead>
+                <tbody id="cveTableBody" class="bg-white divide-y divide-gray-200">
+                    <tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Click "Load First Page" to retrieve data.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="paginationControls" class="flex items-center justify-center gap-4 mt-6">
+            </div>
+
+    </div> <script>
+        const API_URL = 'http://127.0.0.1:8000';
+        
+        let currentPage = 1;
+        let pageSize = parseInt(document.getElementById('pageSize').value);
+        let totalRecords = 0;
+
+        const tableBody = document.getElementById('cveTableBody');
+        const statusMessage = document.getElementById('status-message');
+        const paginationInfo = document.getElementById('pagination-info');
+        const paginationControls = document.getElementById('paginationControls');
+        const loadInitialDataButton = document.getElementById('loadInitialData');
+        const pageSizeSelect = document.getElementById('pageSize');
+        const searchCveIdInput = document.getElementById('searchCveId');
+        const searchButton = document.getElementById('searchButton');
+        
+        // --- Utility Functions ---
+
+        function showMessage(message, type = 'success') {
+            statusMessage.textContent = message;
+            statusMessage.classList.remove('hidden', 'bg-red-100', 'bg-green-100', 'text-red-700', 'text-green-700');
+            if (type === 'error') {
+                statusMessage.classList.add('bg-red-100', 'text-red-700');
+            } else {
+                statusMessage.classList.add('bg-green-100', 'text-green-700');
+            }
+        }
+
+        function clearTable() {
+            tableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-400">Loading data...</td></tr>';
+            paginationControls.innerHTML = '';
+        }
+
+        function formatCveDate(dateString) {
+            try {
+                return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            } catch {
+                return dateString.substring(0, 10);
+            }
+        }
+        
+        function getCveSeverity(cve) {
+            try {
+                const metrics = cve.metrics.cvssMetricV31 || cve.metrics.cvssMetricV30 || cve.metrics.cvssMetricV2;
+                if (metrics && metrics.length > 0) {
+                    return metrics[0].cvssData.baseSeverity || 'N/A';
+                }
+                return 'N/A';
+            } catch {
+                return 'N/A';
+            }
+        }
+        
+        // --- Core Data Fetching ---
+
+        async function fetchCves(page) {
+            clearTable();
+            const skip = (page - 1) * pageSize;
+            
+            try {
+                const response = await fetch(`${API_URL}/cves?skip=${skip}&limit=${pageSize}`);
+                
+                if (response.status === 503) {
+                    throw new Error("Database service is unavailable. Please check MongoDB.");
+                }
+                if (!response.ok) {
+                    const errorJson = await response.json();
+                    throw new Error(errorJson.detail || `HTTP Error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                totalRecords = data.total_count || 0;
+                currentPage = page;
+                
+                renderTable(data.data);
+                renderPagination(totalRecords);
+                
+                showMessage(`Successfully loaded page ${currentPage}. Showing ${data.data.length} records.`, 'success');
+
+            } catch (error) {
+                renderTable([]);
+                showMessage(`Failed to load data: ${error.message}`, 'error');
+                totalRecords = 0;
+                currentPage = 0;
+                renderPagination(0);
+            }
+        }
+
+        // --- Rendering Functions ---
+
+        function renderTable(cveList) {
+            tableBody.innerHTML = '';
+
+            if (cveList.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">No CVE records found for this page.</td></tr>';
+                return;
+            }
+
+            cveList.forEach(cve => {
+                const row = tableBody.insertRow();
+                row.className = 'hover:bg-indigo-50 transition duration-150';
+
+                // Get ID (prioritizing 'cveId' which the backend uses, falling back to 'id')
+                const id = cve.cveId || cve.id || 'N/A';
+                
+                // Get Description Snippet
+                const description = (cve.descriptions && cve.descriptions[0].value) || 'No description available.';
+                const snippet = description.length > 70 ? description.substring(0, 67) + '...' : description;
+                
+                // Get Severity
+                const severity = getCveSeverity(cve);
+
+                // Get Date
+                const publishedDate = formatCveDate(cve.published);
+
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-700">
+                        <a href="cve_detail.html?cve_id=${id}" class="hover:underline font-bold text-indigo-800 transition duration-150">${id}</a>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${publishedDate}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                            ${severity === 'CRITICAL' ? 'bg-red-100 text-red-800' : 
+                              severity === 'HIGH' ? 'bg-orange-100 text-orange-800' : 
+                              severity === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}">
+                            ${severity}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600">${snippet}</td>
+                `;
+            });
+        }
+
+        function renderPagination(total) {
+            const totalPages = Math.ceil(total / pageSize);
+            paginationControls.innerHTML = '';
+
+            // Update info display
+            document.getElementById('totalRecords').textContent = total;
+            document.getElementById('currentPage').textContent = totalPages > 0 ? currentPage : 0;
+            document.getElementById('totalPages').textContent = totalPages;
+
+            if (totalPages <= 1) return;
+
+            // Previous Button
+            paginationControls.innerHTML += `
+                <button onclick="changePage(${currentPage - 1})" 
+                        ${currentPage === 1 ? 'disabled' : ''}
+                        class="px-3 py-1 text-sm font-medium rounded-lg shadow-sm 
+                               ${currentPage === 1 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-indigo-700 text-white hover:bg-indigo-800'}">
+                    Previous
+                </button>
+            `;
+            
+            // Page Number Buttons (showing a limited range around current page)
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                paginationControls.innerHTML += `
+                    <button onclick="changePage(${i})" 
+                            class="px-4 py-1 text-sm font-medium rounded-lg shadow-sm transition duration-150
+                                   ${i === currentPage ? 'bg-indigo-800 text-white custom-shadow' : 'bg-white text-indigo-700 border border-indigo-300 hover:bg-indigo-50'}">
+                        ${i}
+                    </button>
+                `;
+            }
+
+            // Next Button
+            paginationControls.innerHTML += `
+                <button onclick="changePage(${currentPage + 1})" 
+                        ${currentPage === totalPages ? 'disabled' : ''}
+                        class="px-3 py-1 text-sm font-medium rounded-lg shadow-sm 
+                               ${currentPage === totalPages ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-indigo-700 text-white hover:bg-indigo-800'}">
+                    Next
+                </button>
+            `;
+        }
+
+        // --- Event Handlers ---
+        
+        window.changePage = function(page) {
+            const totalPages = Math.ceil(totalRecords / pageSize);
+            if (page >= 1 && page <= totalPages) {
+                fetchCves(page);
+            }
+        }
+        
+        loadInitialDataButton.addEventListener('click', () => {
+            fetchCves(1); // Always start from page 1
+        });
+
+        pageSizeSelect.addEventListener('change', (e) => {
+            pageSize = parseInt(e.target.value);
+            fetchCves(1); // Reset to page 1 whenever page size changes
+        });
+
+        searchButton.addEventListener('click', async () => {
+            const cveId = searchCveIdInput.value.trim();
+            if (!cveId) {
+                showMessage("Please enter a CVE ID.", 'error');
+                return;
+            }
+
+            // Redirect to the detail page for the search result
+            window.location.href = `cve_detail.html?cve_id=${cveId}`;
+        });
+        
+        // Load initial count on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('totalRecords').textContent = '...';
+            document.getElementById('currentPage').textContent = '1';
+            document.getElementById('totalPages').textContent = '1';
+            
+            // Fetch the total count immediately without loading data
+            fetch(`${API_URL}/count`)
+                .then(response => response.json())
+                .then(data => {
+                    totalRecords = data.total_documents || 0;
+                    document.getElementById('totalRecords').textContent = totalRecords;
+                    document.getElementById('totalPages').textContent = Math.ceil(totalRecords / pageSize);
+                    showMessage(`API ready. ${totalRecords} records available.`, 'success');
+                })
+                .catch(error => {
+                    document.getElementById('totalRecords').textContent = 'Error';
+                    showMessage(`API Host Error: Could not connect to FastAPI. Is your server running?`, 'error');
+                });
+        });
+
+    </script>
+</body>
+</html>
