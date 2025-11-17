@@ -64,17 +64,33 @@ The frontend uses standard HTML and JavaScript and does not require a separate b
 
 The FastAPI application exposes the following endpoints:
 
-Method,Endpoint,Description
-GET,/count,Returns the total document count in the cves collection.
-GET,/cves,"Retrieves a list of CVEs with pagination. Query Params: skip (int), limit (int)."
-GET,/cve/{cve_id},Retrieves the full JSON document for a specific CVE ID.
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| GET | `/count` | Returns the total document count in the cves collection. |
+| GET | `/cves` | Retrieves a list of CVEs with pagination. Query Params: skip (int), limit (int). |
+| GET | `/cve/{cve_id}` | Retrieves the full JSON document for a specific CVE ID. |
+
+### Output 
+
+![Uploading Screenshot (33).png…]()
+
+![Uploading Screenshot (34).png…]()
+
+![Uploading Screenshot (35).png…]()
+
+![Uploading Screenshot (36).png…]()
+
+![Uploading Screenshot (37).png…]()
+
+
 
 
 ### 🗂️ Project Files
 
 The project is structured with minimal files for clarity and simplicity.
 
-File,Role,Details
-main.py,Backend API,"Defines connection logic and three FastAPI endpoints (/count, /cves, /cve/{cve_id})."
-index.html,Main Frontend,Displays the paginated table and search bar. Contains the logic for fetching lists and redirecting to the detail page.
-cve_detail.html,Detail Page,"Fetches the full JSON for a specific CVE ID and parses it to display key vulnerability data (CVSS, Configurations) in a readable format, alongside the raw data."
+| File | Role | Details |
+| :--- | :--- | :--- |
+| `main.py` | **Backend API** | Defines connection logic and three FastAPI endpoints (`/count`, `/cves`, `/cve/{cve_id}`). |
+| `index.html` | **Main Frontend** | Displays the paginated table and search bar. Contains the logic for fetching lists and redirecting to the detail page. |
+| `cve_detail.html` | **Detail Page** | Fetches the full JSON for a specific CVE ID and parses it to display key vulnerability data (CVSS, Configurations) in a readable format, alongside the raw data. |
