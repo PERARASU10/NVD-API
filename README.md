@@ -72,15 +72,18 @@ The FastAPI application exposes the following endpoints:
 
 ### Output 
 
-![Uploading Screenshot (33).png…]()
+<img width="1920" height="1080" alt="Screenshot (33)" src="https://github.com/user-attachments/assets/332d0860-a207-4dbd-aa00-bb9062e31a96" />
 
-![Uploading Screenshot (34).png…]()
+<img width="1920" height="1080" alt="Screenshot (34)" src="https://github.com/user-attachments/assets/180b3474-7b3f-42c5-bf6f-293e8f0951c2" />
 
-![Uploading Screenshot (35).png…]()
+<img width="1920" height="1080" alt="Screenshot (35)" src="https://github.com/user-attachments/assets/1efedaef-aec6-4769-ace2-957a8473dd45" />
 
-![Uploading Screenshot (36).png…]()
+<img width="1920" height="1080" alt="Screenshot (36)" src="https://github.com/user-attachments/assets/3266f8b8-a772-48c9-92b7-b93bb4d0688c" />
 
-![Uploading Screenshot (37).png…]()
+<img width="1920" height="1080" alt="Screenshot (37)" src="https://github.com/user-attachments/assets/e2c2cd11-9d67-441a-b649-d5abcf949634" />
+
+<img width="1920" height="1080" alt="Screenshot (38)" src="https://github.com/user-attachments/assets/651dbc5a-db6b-4560-a8a0-4ddfe0aac09c" />
+
 
 
 
